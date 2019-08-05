@@ -1,0 +1,495 @@
+import matplotlib.pyplot as plt
+import math
+import random
+import numpy as np
+import tensorflow as tf
+import matplotlib.pyplot as plt
+import pandas as pd
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL']='2'
+"""
+遗传算法优化bp神经网络的初始权重和阈值。
+bp神经网络总共有一个输入层，两个隐含层，一个输出层，输入层有两个输入变量，隐含层各有8个节点，一个输出节点
+总共有16+64+8=88个权重，和8+8+1=17.总共有105个变量因为这些变量的取值范围为【-2,2】，因此一个变量的编码长度是
+16位。总共有1680位(105*16)。总的编码含义是
+16*16=256，8*16=128,64*16=1024,8*16=128,8*16=128,1*16=16.
+256,384,1408,1536,1664,1680
+"""
+class SmallConfig(object):
+    """Small config."""
+    learning_rate =0.01#0.0006#学习率
+    num_layers = 2# 隐含层的层数
+    hidden1_units =8# 
+    hidden2_units =8# 
+    max_max_epoch =2#迭代次数
+    batch_size =60#批量大小
+    input_size=2
+    output_size=1
+    keep_prob = 0.98
+class PTBModel(object):
+    """The PTB model."""
+    def __init__(self, is_training, config,weights1num,biases1num,weights2num,biases2num,weights3num,biases3num):
+        batch_size = config.batch_size#批量大小60
+        self.input_data = tf.placeholder(tf.float32, [batch_size,config.input_size])#存储输入数据【20,2】
+        self.targets = tf.placeholder(tf.float32, [batch_size,config.output_size])#存储输出数据【20,1】
+        
+       #tf.nn.relu()
+        weights1 = tf.Variable(weights1num,name='weights1')
+        biases1 = tf.Variable(biases1num,name='biases1')
+        hidden1 = tf.nn.elu(tf.matmul(self.input_data, weights1) + biases1)
+        hidden1 = tf.nn.dropout(hidden1, config.keep_prob)
+        
+        #backweights = tf.Variable(tf.truncated_normal([config.hidden2_units, config.input_size],stddev=1.0),name='backweights')
+        #backbiases = tf.Variable(tf.zeros([config.input_size]),name='backbiases')
+        #backhidden = tf.nn.elu(tf.matmul(hidden1, backweights) + backbiases)
+       # backhidden = tf.nn.dropout(backhidden, config.keep_prob)
+        weights2 = tf.Variable(weights2num,name='weights2')
+        biases2 = tf.Variable(biases2num,name='biases2')
+        hidden2 = tf.nn.elu(tf.matmul(hidden1, weights2) + biases2)
+        hidden2 = tf.nn.dropout(hidden2, config.keep_prob)
+        weights3 = tf.Variable(weights3num,name='weights3')
+        biases3 = tf.Variable(biases3num,name='biases3')
+        self.logits = tf.matmul(hidden2, weights3) + biases3
+        self.variables_dict = {'weights1': weights1, 'biases1': biases1, 'weights2': weights2, 'biases2': biases2, 'weights3': weights3, 'biases3': biases3}
+        self.loss=tf.reduce_mean(tf.square(self.logits-self.targets))
+        if not is_training:
+            return 
+        optimizer = tf.train.AdamOptimizer(0.01)
+        self.train_op = optimizer.minimize(self.loss)
+
+class PTBModeltran(object):
+    """The PTB model."""
+    def __init__(self, is_training, config,weights1num,biases1num,weights2num,biases2num,weights3num,biases3num):
+        batch_size = config.batch_size#批量大小60
+        self.input_data = tf.placeholder(tf.float32, [batch_size,config.input_size])#存储输入数据【20,2】
+        self.targets = tf.placeholder(tf.float32, [batch_size,config.output_size])#存储输出数据【20,1】
+        
+       
+        hidden1 = tf.nn.elu(tf.matmul(self.input_data, weights1num) + biases1num)
+        hidden1 = tf.nn.dropout(hidden1, config.keep_prob)
+        hidden2 = tf.nn.elu(tf.matmul(hidden1, weights2num) + biases2num)
+        hidden2 = tf.nn.dropout(hidden2, config.keep_prob)
+        weights3 = tf.Variable(weights3num,name='weights3')
+        biases3 = tf.Variable(biases3num,name='biases3')
+        self.logits = tf.matmul(hidden2, weights3num) + biases3num
+        #self.logits1.extend(self.logits2)
+        #self.logits1.extend(self.logits3)
+        #self.variables_dict = {'weights1': weights1, 'biases1': biases1, 'weights2': weights2, 'biases2': biases2, 'weights3': weights3, 'biases3': biases3}
+        #print()
+        self.loss=tf.reduce_mean(tf.square(self.logits-self.targets)) 
+def readgasload():
+    gasfile=open('gasloadcsv9.csv') 
+    datafile=pd.read_csv(gasfile)     
+    data=datafile.iloc[:,3:8].values
+    return data
+def get_train_data(data,batch_size=60,train_begin=0,train_end=2740):
+    data_train=data[train_begin:train_end]
+    normalized_train_data=(data_train-np.mean(data_train,axis=0))/np.std(data_train,axis=0)  #标准化z-score 标准化
+    train_x,train_y=[],[]   #训练集x和y初定义
+    train_x=normalized_train_data[0:2740,:2]
+    train_y=normalized_train_data[0:2740,2,np.newaxis]
+    #train_y.reshape(2923,1)
+    #train_y.extend(y)
+    return train_x,train_y
+def get_testv_data(data,test_begin=2740):
+    data_test=data[2740:2920]
+    train_data=data[0:2740]
+    mean=np.mean(train_data,axis=0)
+    std=np.std(train_data,axis=0)
+    normalized_test_data=(data_test-mean)/std  #标准化
+    test_x,test_y=[],[]  
+    test_x=normalized_test_data[0:,:2]
+    test_y=normalized_test_data[0:,2]
+    return mean,std,test_x,test_y
+    
+   # normalized_testv_x=(testv_x-np.mean(testv_x,axis=0))/np.std(testv_x,axis=0) 
+    #return testv_x,testv_y,testlv_y
+def get_test_data(data,test_begin=2920):
+    data_test=data[2920:]
+    train_data=data[0:2740]
+    mean=np.mean(train_data,axis=0)
+    std=np.std(train_data,axis=0)
+    normalized_test_data=(data_test-mean)/std  #标准化
+    test_x,test_y=[],[]  
+    test_x=normalized_test_data[0:,:2]
+    test_y=normalized_test_data[0:,2]
+    return mean,std,test_x,test_y
+def train_lstm(gasdata,config,weights1num,biases1num,weights2num,biases2num,weights3num,biases3num,numb):
+    train_x,train_y=get_train_data(gasdata,batch_size=60,train_begin=0,train_end=2923)
+    
+    train_mode=PTBModel(is_training=True, config=config,weights1num=weights1num,biases1num=biases1num,weights2num=weights2num,biases2num=biases2num,weights3num=weights3num,biases3num=biases3num)
+    
+    saver=tf.train.Saver(train_mode.variables_dict)
+    #module_file = tf.train.latest_checkpoint("logs/")
+    with tf.Session() as sess:
+        sess.run(tf.global_variables_initializer())
+        #saver.restore(sess, module_file)
+        #重复训练10000次-训练集
+        for i in range(config.max_max_epoch):
+            itemd=0
+            total_loss=0
+            start_batch=0;
+            end_batch=config.batch_size;
+#            if i%config.max_epoch==0:
+#                train_mode.assign_lr(sess, config.learning_rate * config.lr_decay)
+            while end_batch<len(train_x):
+                _,loss_=sess.run([train_mode.train_op,train_mode.loss],feed_dict={train_mode.input_data:train_x[start_batch:end_batch],train_mode.targets:train_y[start_batch:end_batch]})
+                itemd+=1
+                total_loss+=loss_
+                start_batch+=config.batch_size 
+                end_batch+=config.batch_size
+            print(i,total_loss/itemd)
+            if i==numb:
+                checkpoint_file = os.path.join("logs/", 'stock2.model')
+                print("保存模型：",saver.save(sess,checkpoint_file,global_step=i))
+def prediction(gasdata,config,weights1num,biases1num,weights2num,biases2num,weights3num,biases3num,falg):
+    mean,std,test_x,test_y=get_test_data(gasdata,test_begin=2923)
+    
+    test_model = PTBModeltran(is_training=False, config=config,weights1num=weights1num,biases1num=biases1num,weights2num=weights2num,biases2num=biases2num,weights3num=weights3num,biases3num=biases3num)#构建训练模型lstm网络，初始参数用初始化器进行初始化
+    #saver=tf.train.Saver(test_model.variables_dict)
+    with tf.Session() as sess:
+        test_predict=[]
+        test_y=test_y[0:180]
+        test_y=np.reshape(test_y,[180,1])
+        test_x=test_x[0:180]
+        #print(test_y)
+        #sess.run(tf.global_variables_initializer())
+        #module_file = tf.train.latest_checkpoint("logs/")
+        #saver.restore(sess, module_file) 
+        sumloss=0
+        for step in range(len(test_x)-1):
+            prob,loss_=sess.run([test_model.logits,test_model.loss],feed_dict={test_model.input_data:[test_x[step]],test_model.targets:[test_y[step]]})   
+            predict=prob.reshape((-1))
+            test_predict.extend(predict)
+            sumloss=sumloss+loss_
+        test_y=np.array(test_y)*std[2]+mean[2]
+        test_predict=np.array(test_predict)*std[2]+mean[2]
+       
+        mape=np.average(np.abs(test_predict-test_y[:len(test_predict)])/test_y[:len(test_predict)]) #acc为测试集偏差
+        sumloss=sumloss/180
+        return test_predict,sumloss
+        
+def predictiontest(gasdata,config,weights1num,biases1num,weights2num,biases2num,weights3num,biases3num):
+    mean,std,test_x,test_y=get_test_data(gasdata,test_begin=2923)
+    
+    test_model = PTBModel(is_training=False, config=config,weights1num=weights1num,biases1num=biases1num,weights2num=weights2num,biases2num=biases2num,weights3num=weights3num,biases3num=biases3num)#构建训练模型lstm网络，初始参数用初始化器进行初始化
+    saver=tf.train.Saver(test_model.variables_dict)
+    with tf.Session() as sess:
+        test_predict=[]
+        test_y=test_y[0:180]
+        test_x=test_x[0:180]
+        module_file = tf.train.latest_checkpoint("logs/")
+        saver.restore(sess, module_file) 
+        for step in range(len(test_x)-1):
+            prob=sess.run(test_model.logits,feed_dict={test_model.input_data:[test_x[step]]})   
+            predict=prob.reshape((-1))
+            test_predict.extend(predict)
+            
+        test_y=np.array(test_y)*std[2]+mean[2]
+        test_predict=np.array(test_predict)*std[2]+mean[2]
+        mape=np.average(np.abs(test_predict-test_y[:len(test_predict)])/test_y[:len(test_predict)]) #acc为测试集偏差
+       
+        return test_predict,mape
+       
+def evalmape(preds, gaps):
+    err = abs(gaps-preds)/gaps
+    err[(gaps==0)] = 0
+    err = np.mean(err)
+    return 'error',err  
+def main():
+    gasdata=readgasload()
+    config =SmallConfig()#用small类型的lstm网络
+    eval_config =SmallConfig()
+    eval_config.batch_size = 1
+
+  
+    pop_size =10 # 种群数量
+    upper_limit = 2  # 基因中允许出现的最大值，定义域的最大值【-2,2】
+    lower_limit=-2
+    chromosome_length = 1680  # 染色体长度16位长度对于优化bp神经网络初始值，总共有
+    iter =8#迭代次数
+    pc = 0.8 # 杂交概率
+    pm = 0.3  # 变异概率
+    ps=0.8
+    results = []  # 存储每一代的最优解，N个二元组
+   
+    pop = init_population(pop_size, chromosome_length)
+    #print(pop)
+    best_X = []
+    best_Y = []
+    #cout=0
+    for i in range(iter):
+        obj_value = calc_obj_value(pop, chromosome_length, upper_limit,lower_limit,gasdata,config,eval_config)  # 个体评价，有负值
+        #print(obj_value)
+        #train_lstm(gasdata,config)
+        fit_value = calc_fit_value(obj_value)  # 个体适应度，不好的归0，可以理解为根据c_min这个阈值去掉上面的小于这个阈值的值。
+        best_individual, best_fit = find_best(pop, fit_value)  # 第一个是最优基因序列, 第二个是对应的最佳个体适度
+#        print(fit_value)
+        #print(best_individual)
+#        print(best_fit)
+#        # 下面这句就是存放每次迭代的最优x值是最佳y值
+        results.append([binary2decimal(best_individual, upper_limit, chromosome_length), best_fit])
+#        # 查看一下种群分布
+#        #plot_currnt_individual(decode_chromosome(pop, chromosome_length, upper_limit), obj_value)
+##
+        #selection(pop, fit_value)  # 选择
+        selection(pop, fit_value,best_individual,best_fit,ps)
+        #print(pop)
+        #print()
+        crossover(pop, pc)  # 染色体交叉-相邻个体杂交（两个个体）（最优个体之间进行0、1互换）--随机概率随机杂交点进行相邻两个个体进行杂交--比如10位基因，前5为和相邻的个体的后5为进行结合生成新个体
+        mutation(pop, pm)  # 染色体变异-（一个个体变异）（其实就是随机进行0、1取反）
+        # 最优解的变化
+     #print(results[1]) 
+    best_fitt = results[0][1]
+    best_individualt =results[0][0]
+    for i in range(1, len(results)):
+        if (results[i][1]<best_fitt):
+            best_fitt =results[i][1]
+            best_individualt = results[i][0]
+            #print(results[i][1])
+    #print(best_fitt)
+    weights1num=np.reshape(np.array(best_individualt[0][0],dtype=np.float32),[2,8])
+    biases1num=np.array(best_individualt[0][1],dtype=np.float32)
+    weights2num=np.reshape(np.array(best_individualt[0][2],dtype=np.float32),[8,8])
+    biases2num=np.array(best_individualt[0][3],dtype=np.float32)
+    weights3num=np.reshape(np.array(best_individualt[0][4],dtype=np.float32),[8,1])
+    biases3num=np.array(best_individualt[0][5],dtype=np.float32)
+    config.max_max_epoch=2000
+    train_lstm(gasdata,config,weights1num,biases1num,weights2num,biases2num,weights3num,biases3num,1900)
+    test_predict,mape=predictiontest(gasdata,eval_config,weights1num,biases1num,weights2num,biases2num,weights3num,biases3num)
+    for i in test_predict:
+         print(i)
+    print(mape)
+    #print(best_individualt)
+
+
+
+# 看看我们要处理的目标函数
+def plot_obj_func():
+    """y = 10 * math.sin(5 * x) + 7 * math.cos(4 * x)"""
+    X1 = [i / float(10) for i in range(0, 100, 1)]
+    Y1 = [10 * math.sin(5 * x) + 7 * math.cos(4 * x) for x in X1]
+    plt.plot(X1, Y1)
+    plt.show()
+
+
+# 看看当前种群个体的落点情况
+def plot_currnt_individual(X, Y):
+    X1 = [i / float(10) for i in range(0, 100, 1)]
+    Y1 = [10 * math.sin(5 * x) + 7 * math.cos(4 * x) for x in X1]
+    plt.plot(X1, Y1)
+    plt.scatter(X, Y, c='r', s=5)
+    plt.show()
+
+
+# 看看最终的迭代变化曲线
+def plot_iter_curve(iter, results):
+    X = [i for i in range(iter)]
+    Y = [results[i][1] for i in range(iter)]
+    plt.plot(X, Y)
+    plt.show()
+
+
+# 计算2进制序列代表的数值
+def binary2decimal(binary, upper_limit, chromosome_length):
+    X = []
+    sum_x=[]
+    sum_pop=[]
+    temp = 0
+    suma=0
+    X.clear()
+    sum_x.clear()
+        # 二进制变成实数，种群中的每个个体对应一个数字
+    for i, coff in enumerate(binary):
+            
+            # 就是把二进制转化为十进制的
+        temp += coff * (2 ** suma)
+        suma=suma+1
+        if ((i+1)%16.0)==0:
+            suma=0
+            X.append(((-2)+temp * (upper_limit-(-2)) / (2 ** 16 - 1)))
+            temp=0
+        #if (i==256 or i==384 or i==1408 or i==1536 or i==1664 or i==1680):#256,384,1408,1536,1664,1680
+        #print(X)
+    sum_x.append(X[0:16])
+    sum_x.append(X[16:24])
+    sum_x.append(X[24:88])
+    sum_x.append(X[88:96])
+    sum_x.append(X[96:104])
+    sum_x.append(X[104:105])
+        #print(sum_x)
+    sum_pop.append(sum_x)
+
+    return sum_pop
+
+
+def init_population(pop_size, chromosome_length):
+    # 形如[[0,1,..0,1],[0,1,..0,1]...]
+    pop = [[random.random() for i in range(chromosome_length)] for j in range(pop_size)]
+    return pop
+
+
+# 解码并计算值
+def decode_chromosome(pop, chromosome_length, upper_limit,lower_limit):#500,10,10
+    X = []
+    sum_x=[]
+    sum_pop=[]
+    for ele in pop:
+        temp = 0
+        suma=0
+        X.clear()
+        sum_x.clear()
+        # 二进制变成实数，种群中的每个个体对应一个数字
+        for i, coff in enumerate(ele):
+            
+            # 就是把二进制转化为十进制的
+            temp += coff * (2 ** suma)
+            suma=suma+1
+            if ((i+1)%16.0)==0:
+                suma=0
+                X.append((lower_limit+temp * (upper_limit-lower_limit) / (2 ** 16 - 1)))
+                temp=0
+        #if (i==256 or i==384 or i==1408 or i==1536 or i==1664 or i==1680):#256,384,1408,1536,1664,1680
+        #print(X)
+        sum_x.append(X[0:16])
+        sum_x.append(X[16:24])
+        sum_x.append(X[24:88])
+        sum_x.append(X[88:96])
+        sum_x.append(X[96:104])
+        sum_x.append(X[104:105])
+       
+        sum_pop.append(sum_x)
+        
+        
+           
+
+    return sum_pop
+
+
+def calc_obj_value(pop, chromosome_length, upper_limit,lower_limit,gasdata,config,eval_config):#500个个体，每个个体只有一条染色体，每条染色体有10位。
+    obj_value = []
+    X = decode_chromosome(pop, chromosome_length, upper_limit,lower_limit)
+    p=0
+    for ih in X:
+        weights1num=np.reshape(np.array(ih[0],dtype=np.float32),[2,8])
+        biases1num=np.array(ih[1],dtype=np.float32)
+        weights2num=np.reshape(np.array(ih[2],dtype=np.float32),[8,8])
+        biases2num=np.array(ih[3],dtype=np.float32)
+        weights3num=np.reshape(np.array(ih[4],dtype=np.float32),[8,1])
+        biases3num=np.array(ih[5],dtype=np.float32)
+        #train_lstm(gasdata,config,weights1num,biases1num,weights2num,biases2num,weights3num,biases3num,1)
+        test_predict,mape=prediction(gasdata,eval_config,weights1num,biases1num,weights2num,biases2num,weights3num,biases3num,2)
+        p=p+1
+        print(p,mape)
+        obj_value.append(mape)
+        #for i in test_predict:
+         #print(i)
+   
+
+    return obj_value
+    #return X
+
+
+# 淘汰
+def calc_fit_value(obj_value):
+    fit_value = []
+    # 去掉小于0的值，更改c_min会改变淘汰的下限
+    # 比如设成10可以加快收敛
+    # 但是如果设置过大，有可能影响了全局最优的搜索
+    c_min = 80
+    for value in obj_value:
+        if value<c_min:
+            temp = value
+        else:
+            temp = 99.
+        fit_value.append(temp)
+    # fit_value保存的是活下来的值
+    return fit_value
+
+
+# 找出最优解和最优解的基因编码
+def find_best(pop, fit_value):
+    # 用来存最优基因编码
+    best_individual = []
+    # 先假设第一个基因的适应度最好
+    best_fit = fit_value[0]
+    best_individual = pop[0]
+    for i in range(1, len(pop)):
+        if (fit_value[i]<best_fit):
+            best_fit = fit_value[i]
+            best_individual = pop[i]
+            #print(best_individual)
+    # best_fit是值
+    # best_individual是基因序列
+    return best_individual, best_fit
+
+
+# 计算累计概率
+def cum_sum(fit_value):
+    # 输入[1, 2, 3, 4, 5]，返回[1,3,6,10,15]，matlab的一个函数
+    # 这个地方遇坑，局部变量如果赋值给引用变量，在函数周期结束后，引用变量也将失去这个值
+    temp = fit_value[:]
+    for i in range(len(temp)):
+        fit_value[i] = (sum(temp[:i + 1]))
+
+
+# 轮赌法选择
+def selection(pop, fit_value,best_individual,best_fit,ps):
+    # https://blog.csdn.net/pymqq/article/details/51375522
+    pop_len = len(pop)
+    for i in range(pop_len - 1):
+        if (random.random() < ps):
+            mpoint = random.randint(0, len(pop)-1)
+            #print(mpoint)
+            if fit_value[mpoint]<(best_fit):
+                pop[mpoint]=best_individual
+
+
+
+# 杂交
+def crossover(pop, pc):
+    pop_len = len(pop)
+    for i in range(pop_len - 1):
+        # 随机看看达到杂交概率没--随机杂交-500个体，随机选择两个杂交
+        childmin = []
+        childmax = []
+        tempchildboy=[]
+        tempchildgirl=[]
+        tempbg=[]
+        if (random.random() < pc):
+            # 随机选取杂交点（在染色体基因序列位置，比如10位，这里可能是位置6开始杂交），然后交换数组
+            for j in range(len(pop[i])):
+                if(pop[i][j]>pop[i+1][j]):
+                    childmax.append(pop[i][j])
+                    childmin.append(pop[i+1][j])
+                else:
+                    childmax.append(pop[i+1][j])
+                    childmin.append(pop[i][j])
+
+            for g in range(len(childmax)):
+                tempbg.append(np.random.uniform(childmin[g],childmax[g],2))
+            #print(tempbg)
+            for gb in tempbg:   
+               tempchildboy.append(gb[0])
+               tempchildgirl.append(gb[1])
+            #print(tempchildboy)
+            #print(tempchildgirl)
+            pop[i] = tempchildboy
+            pop[i + 1] = tempchildgirl
+    # 一定概率杂交，主要是杂交种群种相邻的两个个体
+
+
+
+# 基因突变
+def mutation(pop, pm):
+    px = len(pop)
+    py = len(pop[0])#10
+    # 每条染色体随便选一个杂交
+    for i in range(px):
+        if (random.random() < pm):
+            mpoint = random.randint(0, py - 1)
+            pop[i][mpoint]=random.random()*((2 **(1680-mpoint))/((2 **(1680+1)-1)))
+
+
+if __name__ == '__main__':
+    main()

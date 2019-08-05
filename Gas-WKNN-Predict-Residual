@@ -1,0 +1,111 @@
+import numpy as np
+import tensorflow as tf
+import matplotlib.pyplot as plt
+import pandas as pd
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL']='2'
+from math import sqrt
+
+            
+def classify0(inx,dataset,labels,k):#[0,100],[100,1000],[100,10000]的标签，k=3，最近邻的3个元素为基础。
+    datasetsize=dataset.shape[0]#900
+    
+    #for tet in inx:45:255
+        
+    diffmat=np.tile(inx,(datasetsize,1))-dataset#np.tile(a,(b,z))把a沿着x轴复制z倍，沿着y轴复制b倍（【0,0】，（4,1））
+    #这里就是把【0,0】，沿着x轴复制1倍，沿着y轴复制4倍，变成4X2矩阵。求两者之间的距离，然后平方。
+    sqdiffmat=diffmat**2#距离平方4x2
+   
+    sqdistances=sqdiffmat.sum(axis=1)#按行累加距离---1X4
+    
+    distances=sqdistances**0.5#开根号
+    #print(distances)
+    sorteddistindicies=distances.argsort()#argsort按距离值递增排序，输出排序后值的索引。最终存储的是离测试样本最近的k个样本的坐标
+    
+    oteilabel=0
+    for i in range(k):
+        oteilabel+=((labels[sorteddistindicies[i]])*(1/(distances[sorteddistindicies[i]]+1)))
+        #print(1/(distances[sorteddistindicies[i]]))
+       # print(labels[sorteddistindicies[i]][0])
+         #testyy.append(oteilabel)
+    return oteilabel[0]
+    #classcount={}#
+    #for i in range(k):
+        #voteilabel=labels[sorteddistindicies[i]]#k=3，所以会选择和测试样本最近的三个样本，这里是【b，b，a】
+        #classcount[voteilabel]=classcount.get(voteilabel,0)+1#存储最近三个样本中的类别得票数这里是b为2票，a为1票
+    #sortedclasscount=sorted(classcount.items(),
+                            #key=operator.itemgetter(1),reverse=True)#itemgetter函数用于获取对象的哪些维的数据，重新排序
+    #return sortedclasscount[0][0]#从大到小排序。输出最相似的类别。
+def readgasload():
+    gasfile=open('gasloadcsv8.csv') 
+    datafile=pd.read_csv(gasfile)     
+    data=datafile.iloc[:,3:12].values
+    return data
+def readgasloadfromseason():
+    gasfile=open('gasloadcsv8_winter.csv') 
+    datafile=pd.read_csv(gasfile)     
+    data=datafile.iloc[:,3:12].values
+    return data
+def get_train_data(data,batch_size=60,train_begin=0,train_end=2740):
+    #data_train=data[train_begin:train_end]
+    #normalized_train_data=(data_train-np.mean(data_train,axis=0))/np.std(data_train,axis=0)  #标准化z-score 标准化
+    train_x,train_y=[],[]   #训练集x和y初定义
+    #train_x=data_train[0:2740,:6]#原先是2920减去验证集的180成为2740
+    #train_y=data_train[0:2740,6,np.newaxis]
+    dataforseason=readgasloadfromseason()
+    
+    train_x=dataforseason[0:722,:6]#原先是2920减去验证集的180成为2740
+    train_y=dataforseason[0:722,6,np.newaxis]
+  #  train_x=(train_x-np.mean(train_x,axis=0))/np.std(train_x,axis=0)  #标准化z-score 标准化
+    #train_y.reshape(2923,1)
+    #train_y.extend(y)
+    #return train_x,train_y
+    return train_x,train_y
+def get_test_data(data,test_begin=2920):
+    data_test=data[test_begin:]
+    #train_data=data[0:2920]
+    #mean=np.mean(train_data,axis=0)
+    #std=np.std(train_data,axis=0)
+    #normalized_test_data=(data_test-mean)/std  #标准化
+    #test_x,test_y=[],[]  
+    test_x=data_test[0:,:6]#特征值
+    test_y=data_test[0:,6]#预测值
+    testl_y=data_test[0:,7]#实际值
+    
+   # normalized_test_x=(test_x-np.mean(test_x,axis=0))/np.std(test_x,axis=0) 
+    return test_x,test_y,testl_y
+def get_testv_data(data,test_begin=2740):
+    data_test=data[2740:2920]
+    #train_data=data[0:2920]
+    #mean=np.mean(train_data,axis=0)
+    #std=np.std(train_data,axis=0)
+    #normalized_test_data=(data_test-mean)/std  #标准化
+    #test_x,test_y=[],[]  
+    testv_x=data_test[0:,:6]#特征值
+    testv_y=data_test[0:,6]#预测值
+    testlv_y=data_test[0:,7]#实际值
+    
+   # normalized_testv_x=(testv_x-np.mean(testv_x,axis=0))/np.std(testv_x,axis=0) 
+    return testv_x,testv_y,testlv_y
+
+datad=readgasload()
+train_x,train_y=get_train_data(datad,batch_size=60,train_begin=0,train_end=2900)
+test_x,test_y,testl_y=get_test_data(datad,test_begin=2920)
+testv_x,testv_y,testlv_y=get_testv_data(datad,test_begin=2900)
+#print(train_y[-1])
+
+ty=[]
+#ty.append(classify0(testv_x[0],train_x,train_y,45))
+for inx in test_x:
+    ty.append(classify0(inx,train_x,train_y,2))
+    #print(ty)#263300+(test_x[0:,0]-test_y)
+testv_x_temp=testv_x[1:,1]
+testv_x_temp=np.append(testv_x_temp,13.8)
+testv_predict=ty+test_y
+#+(testv_x[0:,0]-testv_y)+(testv_x_temp-testv_x[0:,1])
+#print(testv_x_temp)
+#print(len(testv_x[0:179,1]))
+mape=np.average(np.abs(testv_predict-testl_y)/testl_y) #acc为测试集偏差
+print(mape)
+#print(ty)
+#print(testlv_y)
